@@ -8,6 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
-.env
 /.idea
+
+# enviroment vars and dirs
+.env
 /config
+
+# some private archives and dirs
+/spotify_dataset_EDA
+spotify_dataset.zip

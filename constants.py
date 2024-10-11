@@ -43,6 +43,8 @@ MAX_TOKENS = int(3600)
 DEFAULT_COMPARTMENT_ID = os.environ.get('COMPARTMENT_ID')
 DEFAULT_GENAI_SERVICE_ENDPOINT = os.environ.get('GENAI_SERVICE_ENDPOINT')
 SQLALCHEMY_DATABASE_URI: str = get_sqlalchemy_database_uri()
+SPOTIFY_DATABASE_URI: str = os.environ.get('SPOTIFY_DB_URI', None)
+SCHEMA: str = os.environ.get('DB_SCHEMA')
 OCI_CREDENTIALS = get_oci_credentials_from_env()
 IS_OCI_CREDENTIALS_VALID = all(
     OCI_CREDENTIALS.get(k)
@@ -50,37 +52,45 @@ IS_OCI_CREDENTIALS_VALID = all(
 ) and not oci.config.validate_config(OCI_CREDENTIALS)
 
 
-system = """You are an agent designed to interact with a SQL database and tables {tables_names}. 
-To start you should ALWAYS look at the tables in the database to see what you can query.
-Do NOT skip this step.
-Given an input question, create a syntactically correct SQL query, then look at the results of the query and return the answer.
-You can order the results by a relevant column to return the most interesting examples in the database.
-Only ask for the relevant columns given the question.
-Double check the user's {dialect} query for common mistakes, including:
-- Using NOT IN with NULL values
-- Using UNION when UNION ALL should have been used
-- Using BETWEEN for exclusive ranges
-- Data type mismatch in predicates
-- Properly quoting identifiers
-- Using the correct number of arguments for functions
-- Casting to the correct data type
-- Using the proper columns for joins
+# CSV FILES PATH
+LOCAL = os.getcwd()
+SPOTIFY_DATA_TRACKS = LOCAL + '/data.csv'
+SPOTIFY_DATA_ARTISTS = LOCAL + '/artists.csv'
+SPOTIFY_DATA_LISTENERS = LOCAL + '/listeners.csv'
 
-You MUST double check your query before executing it. 
-If you get an error while executing a query, rewrite the query and try again.
+
+system = """
+You are an agent designed to interact with a SQL database. Below is a list of tables and their corresponding columns from the {schema} schema that you can query:
+
+{table_info}
+
+Always refer to these tables when generating SQL queries. You should never reference tables or columns that are not present in the list above.
+
+
+Never include a LIMIT in the query unless explicitly instructed otherwise. When selecting all columns, use 'SELECT *'. Your task is to:
+1. Analyze the input question.
+2. Generate a SQL query that is syntactically correct and relevant to the schema provided.
+3. Return the SQL query and the query results.
+
+If the user asks to order the results by specific columns, ensure that you include an 'ORDER BY' clause based on the input provided.
 DO NOT use Markdown or a codeblock environment.
 DO NOT write ```sql in the beginning of your response. 
 Your response MUST be a PLAIN SQL STATEMENT ONLY. 
-If there are any of the above mistakes, rewrite the query. 
-If there are no mistakes, just reproduce the original query."""
+If there are any of the above mistakes, rewrite the query.
+"""
 
 
-PLOT_PROMPT = """Here is a dataset represented as a DataFrame with the columns: {columnNames}. {table_string}. 
-Please generate a complete Python code to create the most suitable type of graph using these variables. 
-Ensure to remove rows with NaN values. The figure should have the standard size (11, 7). 
+
+PLOT_PROMPT = """Here is a sample of dataset where we show the head and 10 entries of the DataFrame: 
+{df_head}
+Please generate a complete Python code to create the most suitable type of graph using this dataframe's variables.
+In your code you MUST refer to this dataframe as df and treat it as it is already defined this way.
+Ensure to remove rows with NaN values. 
+You might select some kind of plots to that illustrates interesting relations between 2, 3 or 4 variables of this dataframe.
+Examples of plots you can use are {plots}.
+The figure should have the standard size (11, 7). 
 Preferably use matplotlib and matplotlib style ggplot. When creating the figure, remember to name it 'fig'; for bar charts, make them horizontal 
 and always generate legends."""
-
 
 
 ######################################## CONSTANTS FOR CHATDB USING ADB OCI ##############################################

@@ -1,10 +1,15 @@
 import logging
 import re
+
 import pandas as pd
 from langchain_community.utilities import SQLDatabase
-from constants import SQLALCHEMY_DATABASE_URI, PLOT_PROMPT
-from utils import get_llm_model, sql_agent
 
+from constants import (
+    SQLALCHEMY_DATABASE_URI,
+    SPOTIFY_DATABASE_URI,
+    PLOT_PROMPT,
+)
+from utils import get_llm_model, sql_agent, validate_query
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,9 +17,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
+# CHAMANDO O MODELO
 LLM = get_llm_model()
-DB = SQLDatabase.from_uri(SQLALCHEMY_DATABASE_URI)
-SQL_AGENT = sql_agent(LLM, DB)
+
+# DATABASES ACESSÍVEIS
+DB_MIGRATION = SQLDatabase.from_uri(SQLALCHEMY_DATABASE_URI)
+DB_SPOTIFY = SQLDatabase.from_uri(SPOTIFY_DATABASE_URI)
+
 
 
 def ask_oci_genai(question: str):
@@ -26,9 +35,11 @@ def ask_oci_genai(question: str):
         raise e
 
 
-def panda_table_from_query(query: str):
+def panda_table_from_query(query: str, db, schema: str = None):
     try:
-        df = pd.read_sql(query, DB._engine)
+        if schema:
+            query = query.replace('FROM ', f'FROM {schema}.')
+        df = pd.read_sql(query, db._engine)
         return df
     except Exception as e:
         logging.error(f'Erro ao executar a query SQL: {e}')
@@ -37,11 +48,16 @@ def panda_table_from_query(query: str):
 
 def plot_code_from_genai(df: pd.DataFrame):
     try:
-        table_string = df.head(15).to_string(index=False)
-        column_names = df.columns.tolist()
-        prompt = PLOT_PROMPT.format(
-            columnNames=column_names, table_string=table_string
-        )
+        head = df.head(10).to_string(index=False)
+        PLOT_LIST = [
+            'histogram',
+            'lineplot',
+            'scatterplot',
+            'heatmap',
+            'boxplot',
+        ]
+
+        prompt = PLOT_PROMPT.format(df_head=head, plots=PLOT_LIST)
         logging.info(f'O prompt passado à LLM: {prompt}')
 
         response = LLM.invoke(prompt)
@@ -72,26 +88,48 @@ def plot_code_from_genai(df: pd.DataFrame):
         raise e
 
 
-def ask_postgres(question: str):
-    logging.info(f'Consultando SQL agent com a pergunta: {question}')
+# def ask_postgres(question: str, db, schema='public'):
+#     logging.info(f'Consultando SQL agent com a pergunta: {question}')
+#     SQL_AGENT = sql_agent(LLM, db, schema)
+#     try:
+#         my_query = SQL_AGENT.invoke({'question': question})
+#         logging.info(f'Resposta da GenAI: {my_query}')
+#         return my_query
+#     except Exception as e:
+#         logging.error(f'Erro ao consultar o SQL agent: {e}')
+#         raise e
+def ask_postgres(question: str, db, schema="public"):
+    logging.info(f"Consultando SQL agent com a pergunta: {question}")
+    SQL_AGENT = sql_agent(LLM, db, schema)
+
     try:
-        my_query = SQL_AGENT.invoke({'question': question})
-        logging.info(f'Resposta da GenAI: {my_query}')
-        return my_query
+        my_query = SQL_AGENT.invoke({"question": question})
+        logging.info(f"Resposta da GenAI: {my_query}")
+        if validate_query(my_query, db, schema):
+            return my_query
+        else:
+            logging.error(
+                "Query inválida gerada pela GenAI. A execução foi interrompida."
+            )
+            return None
+
     except Exception as e:
-        logging.error(f'Erro ao consultar o SQL agent: {e}')
+        logging.error(f"Erro ao consultar o SQL agent: {e}")
         raise e
 
 
-if __name__ == '__main__':
 
+
+if __name__ == '__main__':
     try:
+
         my_resp = ask_postgres(
-            "filter the table for country and total migration for year equal to 2020"
+            'todas os os artistas com músicas explicitas em 2001', DB_SPOTIFY, 'spotify_schema'
         )
-        my_table = panda_table_from_query(my_resp)
+        my_table = panda_table_from_query(my_resp, DB_SPOTIFY)
+        print(my_table)
         my_plot_code = plot_code_from_genai(my_table)
         print(my_plot_code)
 
     except Exception as e:
-        logging.error(f'Erro ao consultar a GenAI com SQL Agent: {e}')
+        logging.error(f"Erro ao consultar a GenAI com SQL Agent: {e}")
