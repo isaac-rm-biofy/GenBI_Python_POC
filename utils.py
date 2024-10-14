@@ -60,22 +60,33 @@ def get_schema_tables_and_columns(db, schema='public'):
     return tables_and_columns
 
 
-def get_table_headers(db, schema='public', limit=5):
-    headers = {}
+def get_table_headers(db, schema="public", sample_limit=6):
+    """
+    Gera uma string formatada com o nome das tabelas, colunas e até 6 amostras de cada tabela.
+    """
+    table_info_str = ""
     tables_and_columns = get_schema_tables_and_columns(db, schema)
+
     for table, columns in tables_and_columns.items():
         query = f"""
         SELECT *
         FROM {schema}.{table}
-        LIMIT {limit}
+        LIMIT {sample_limit}
         """
         try:
             df = pd.read_sql(query, db._engine)
-            headers[table] = df
+            table_info_str += f"Tabela: {table}\n"
+            table_info_str += "\t".join(df.columns) + "\n"
+
+            for index, row in df.iterrows():
+                table_info_str += "\t".join(map(str, row.values)) + "\n"
+            table_info_str += "\n"
+
         except Exception as e:
-            logging.error(f'Erro ao obter o cabeçalho da tabela {table}: {e}')
-            headers[table] = None
-    return headers
+            logging.error(f"Erro ao obter a amostra da tabela {table}: {e}")
+            table_info_str += f"Tabela: {table} (erro ao obter dados)\n\n"
+    return table_info_str
+
 
 def validate_query(query: str, db, schema="public") -> bool:
     schema_info = get_schema_tables_and_columns(db, schema)
@@ -111,19 +122,18 @@ def get_llm_model():
     return model
 
 
-def sql_agent(llm, db=None, db_schema='public'):
+def sql_agent(llm, db=None, db_schema="public"):
     chain = create_sql_query_chain(llm, db)
+    table_info_str = get_table_headers(db, db_schema)
+
     prompt = ChatPromptTemplate.from_messages(
-        [('system', c.system), ('human', '{query}')]
+        [("system", c.system), ("human", "{query}")]
     ).partial(
         dialect=db.dialect,
-        schema = db_schema,
-        table_info=get_table_headers(db, db_schema),
+        schema=db_schema,
+        table_info=table_info_str,
     )
-    print(db_schema)
-    print(get_table_headers(db, db_schema))
-
     validation_chain = prompt | llm | StrOutputParser()
-    full_chain = {'query': chain} | validation_chain
-    # full_chain.get_prompts()[0].pretty_print()
+    full_chain = {"query": chain} | validation_chain
+
     return full_chain

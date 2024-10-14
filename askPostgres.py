@@ -104,9 +104,9 @@ if __name__ == '__main__':
     try:
 
         my_resp = ask_postgres(
-            'todas as músicas explicitas e o ano', DB_SPOTIFY, 'spotify_schema'
+            'a media de migração total por pais ao longo dos anos ', DB_MIGRATION,
         )
-        my_table = panda_table_from_query(my_resp, DB_SPOTIFY)
+        my_table = panda_table_from_query(my_resp, DB_MIGRATION)
         print(my_table)
         my_plot_code = plot_code_from_genai(my_table)
         print(my_plot_code)

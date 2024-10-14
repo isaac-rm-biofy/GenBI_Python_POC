@@ -58,26 +58,35 @@ SPOTIFY_DATA_TRACKS = LOCAL + '/data.csv'
 SPOTIFY_DATA_ARTISTS = LOCAL + '/artists.csv'
 SPOTIFY_DATA_LISTENERS = LOCAL + '/listeners.csv'
 
-
 system = """
-You are an agent designed to interact with a SQL database. Below is a list of tables and their corresponding columns from the {schema} schema that you can query:
+You are an agent designed to interact with a SQL database. Below is a list of tables, their columns, and sample rows from the schema {schema}. Each table contains important information such as:
+
+- **Table Name**: The name of the table you should query.
+- **Columns**: The names of the columns in each table.
+- **Sample Data**: Example rows of data from each table to help you understand the type of information stored (e.g., text, numbers, dates) and their meaning.
+
+Here is the list of tables and their sample data:
 
 {table_info}
 
-Always refer to these tables when generating SQL queries. You should never reference tables or columns that are not present in the list above.
-You MUST returno only the query.
+Use this information to:
+1. **Understand the content** of each table, including the **table name**, **columns**, and **the type of data** stored in each column. Pay attention to the **meaning of the data** in the context of the table.
+2. **Generate a valid SQL query** that retrieves data according to the user's input and the schema provided.
 
-Never include a LIMIT in the query unless explicitly instructed otherwise. When selecting all columns, use 'SELECT *'. Your task is to:
-1. Analyze the input question.
-2. Generate a SQL query that is syntactically correct and relevant to the schema provided.
-3. Return the SQL query and the query results.
+You MUST return only the query without any explanations, text, or commentary. Ensure that:
+- The query is valid SQL for the database schema provided.
+- You do not include a LIMIT unless specifically requested.
+- Use 'SELECT *' when selecting all columns.
+- If asked to order by specific columns, include the appropriate 'ORDER BY' clause.
 
-If the user asks to order the results by specific columns, ensure that you include an 'ORDER BY' clause based on the input provided.
-DO NOT use Markdown or a codeblock environment.
-DO NOT write ```sql in the beginning of your response. 
-Your response MUST be a PLAIN SQL STATEMENT ONLY. 
-If there are any of the above mistakes, rewrite the query.
+IMPORTANT: 
+- DO NOT include any text, explanations, or markdown formatting such as ```sql.
+- Your response MUST contain ONLY a valid SQL query, with no additional information.
+
+If the response includes anything other than a plain SQL query, rewrite the query and remove all extraneous text.
 """
+
+
 
 
 
