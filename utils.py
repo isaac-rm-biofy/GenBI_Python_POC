@@ -11,9 +11,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 import constants as c
+from langchain.chains import create_sql_query_chain
 
 # from pydantic import BaseModel, Field
-# from langchain.agents import create_sql_agent
+#from langchain.agents import create_sql_agent
 # from langchain.agents.agent_toolkits import SQLDatabaseToolkit
 # from langchain.agents.agent_types import AgentType
 
@@ -98,7 +99,7 @@ def get_llm_model():
         service_endpoint=c.DEFAULT_GENAI_SERVICE_ENDPOINT,
     )
     model = ChatOCIGenAI(
-        model_id='meta.llama-3.1-405b-instruct', #'cohere.command-r-plus', #
+        model_id='cohere.command-r-plus', #
         service_endpoint=c.DEFAULT_GENAI_SERVICE_ENDPOINT,
         compartment_id=c.DEFAULT_COMPARTMENT_ID,
         model_kwargs={
@@ -110,30 +111,19 @@ def get_llm_model():
     return model
 
 
-# def sql_agent(llm, db=None, db_schema='public'):
-#     chain = create_sql_query_chain(llm, db)
-#     prompt = ChatPromptTemplate.from_messages(
-#         [('system', c.system), ('human', '{query}')]
-#     ).partial(
-#         dialect=db.dialect,
-#         table_info=get_table_headers(db, db_schema),
-#     )
-#     print(get_table_headers(db, db_schema))
-#     validation_chain = prompt | llm | StrOutputParser()
-#     full_chain = {'query': chain} | validation_chain
-#     # full_chain.get_prompts()[0].pretty_print()
-#     return full_chain
-# Função para capturar tabelas e colunas corretamente
-
-
-def sql_agent(llm, db=None, db_schema="public"):
-    tables_info = get_schema_tables_and_columns(db, db_schema)
+def sql_agent(llm, db=None, db_schema='public'):
+    chain = create_sql_query_chain(llm, db)
     prompt = ChatPromptTemplate.from_messages(
-        [("system", "You are a SQL expert."), ("human", "{query}")]
+        [('system', c.system), ('human', '{query}')]
     ).partial(
         dialect=db.dialect,
-        table_info=tables_info,
+        schema = db_schema,
+        table_info=get_table_headers(db, db_schema),
     )
-    validation_chain = TransformChain(prompt | llm | StrOutputParser())
-    return validation_chain
+    print(db_schema)
+    print(get_table_headers(db, db_schema))
 
+    validation_chain = prompt | llm | StrOutputParser()
+    full_chain = {'query': chain} | validation_chain
+    # full_chain.get_prompts()[0].pretty_print()
+    return full_chain
