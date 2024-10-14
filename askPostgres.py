@@ -9,7 +9,7 @@ from constants import (
     SPOTIFY_DATABASE_URI,
     PLOT_PROMPT,
 )
-from utils import get_llm_model, sql_agent, validate_query
+from utils import get_llm_model, sql_agent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,45 +88,25 @@ def plot_code_from_genai(df: pd.DataFrame):
         raise e
 
 
-# def ask_postgres(question: str, db, schema='public'):
-#     logging.info(f'Consultando SQL agent com a pergunta: {question}')
-#     SQL_AGENT = sql_agent(LLM, db, schema)
-#     try:
-#         my_query = SQL_AGENT.invoke({'question': question})
-#         logging.info(f'Resposta da GenAI: {my_query}')
-#         return my_query
-#     except Exception as e:
-#         logging.error(f'Erro ao consultar o SQL agent: {e}')
-#         raise e
-def ask_postgres(question: str, db, schema="public"):
-    logging.info(f"Consultando SQL agent com a pergunta: {question}")
+def ask_postgres(question: str, db, schema='public'):
+    logging.info(f'Consultando SQL agent com a pergunta: {question}')
     SQL_AGENT = sql_agent(LLM, db, schema)
-
     try:
-        my_query = SQL_AGENT.invoke({"question": question})
-        logging.info(f"Resposta da GenAI: {my_query}")
-        if validate_query(my_query, db, schema):
-            return my_query
-        else:
-            logging.error(
-                "Query inválida gerada pela GenAI. A execução foi interrompida."
-            )
-            return None
-
+        my_query = SQL_AGENT.invoke({'question': question})
+        logging.info(f'Resposta da GenAI: {my_query}')
+        return my_query
     except Exception as e:
-        logging.error(f"Erro ao consultar o SQL agent: {e}")
+        logging.error(f'Erro ao consultar o SQL agent: {e}')
         raise e
-
-
 
 
 if __name__ == '__main__':
     try:
 
         my_resp = ask_postgres(
-            'todas os os artistas com músicas explicitas em 2001', DB_SPOTIFY, 'spotify_schema'
+            'a media de migração total por pais ao longo dos anos ', DB_MIGRATION,
         )
-        my_table = panda_table_from_query(my_resp, DB_SPOTIFY)
+        my_table = panda_table_from_query(my_resp, DB_MIGRATION)
         print(my_table)
         my_plot_code = plot_code_from_genai(my_table)
         print(my_plot_code)
