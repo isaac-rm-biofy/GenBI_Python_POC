@@ -40,6 +40,7 @@ def get_sqlalchemy_database_uri():
 
 
 MAX_TOKENS = int(3600)
+AMAZONIA_API_KEY = os.environ.get('AMAZONIA_API_KEY', None)
 DEFAULT_COMPARTMENT_ID = os.environ.get('COMPARTMENT_ID')
 DEFAULT_GENAI_SERVICE_ENDPOINT = os.environ.get('GENAI_SERVICE_ENDPOINT')
 SQLALCHEMY_DATABASE_URI: str = get_sqlalchemy_database_uri()
@@ -58,8 +59,9 @@ SPOTIFY_DATA_TRACKS = LOCAL + '/data.csv'
 SPOTIFY_DATA_ARTISTS = LOCAL + '/artists.csv'
 SPOTIFY_DATA_LISTENERS = LOCAL + '/listeners.csv'
 
-system = """
-You are an agent designed to interact with a SQL database. Below is a list of tables, their columns, and sample rows from the schema {schema}. Each table contains important information such as:
+system = """You are an agent designed to interact with a SQL database. Given an input question, create a syntactically correct SQL query to run, then look at the results of the query and return the answer.
+You MUST include the original SQL query used to generate the answer in the output.
+Below is a list of tables, their columns, and sample rows from the schema {schema}. Each table contains important information such as:
 
 - **Table Name**: The name of the table you should query.
 - **Columns**: The names of the columns in each table.
@@ -85,9 +87,6 @@ IMPORTANT:
 
 If the response includes anything other than a plain SQL query, rewrite the query and remove all extraneous text.
 """
-
-
-
 
 
 PLOT_PROMPT = """Here is a sample of dataset where we show the head and 10 entries of the DataFrame: 

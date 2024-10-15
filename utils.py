@@ -1,22 +1,15 @@
 import logging
-
+import os
 import oci
 import pandas as pd
-from dotenv import load_dotenv
-from langchain.chains import TransformChain
-
-# from langchain_core.tools import Tool
-from langchain_community.chat_models import ChatOCIGenAI
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-
 import constants as c
-from langchain.chains import create_sql_query_chain
-
-# from pydantic import BaseModel, Field
-#from langchain.agents import create_sql_agent
-# from langchain.agents.agent_toolkits import SQLDatabaseToolkit
-# from langchain.agents.agent_types import AgentType
+from dotenv import load_dotenv
+from langchain_community.agent_toolkits import SQLDatabaseToolkit
+from langchain_community.agent_toolkits import create_sql_agent
+from langchain_community.chat_models import ChatOCIGenAI
+from langchain_core.messages import SystemMessage
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain_openai import ChatOpenAI
 
 
 load_dotenv()
@@ -60,11 +53,9 @@ def get_schema_tables_and_columns(db, schema='public'):
     return tables_and_columns
 
 
-def get_table_headers(db, schema="public", sample_limit=6):
-    """
-    Gera uma string formatada com o nome das tabelas, colunas e até 6 amostras de cada tabela.
-    """
-    table_info_str = ""
+def get_table_headers(db, schema='public', sample_limit=6):
+
+    table_info_str = ''
     tables_and_columns = get_schema_tables_and_columns(db, schema)
 
     for table, columns in tables_and_columns.items():
@@ -75,65 +66,77 @@ def get_table_headers(db, schema="public", sample_limit=6):
         """
         try:
             df = pd.read_sql(query, db._engine)
-            table_info_str += f"Tabela: {table}\n"
-            table_info_str += "\t".join(df.columns) + "\n"
+            table_info_str += f'Tabela: {table}\n'
+            table_info_str += '\t'.join(df.columns) + '\n'
 
             for index, row in df.iterrows():
-                table_info_str += "\t".join(map(str, row.values)) + "\n"
-            table_info_str += "\n"
+                table_info_str += '\t'.join(map(str, row.values)) + '\n'
+            table_info_str += '\n'
 
         except Exception as e:
-            logging.error(f"Erro ao obter a amostra da tabela {table}: {e}")
-            table_info_str += f"Tabela: {table} (erro ao obter dados)\n\n"
+            logging.error(f'Erro ao obter a amostra da tabela {table}: {e}')
+            table_info_str += f'Tabela: {table} (erro ao obter dados)\n\n'
     return table_info_str
 
 
-def validate_query(query: str, db, schema="public") -> bool:
-    schema_info = get_schema_tables_and_columns(db, schema)
+class SQLHandler(BaseCallbackHandler):
+    def __init__(self):
+        self.sql_result = []
 
-    for table in schema_info.keys():
-        if table in query:
-            columns = schema_info[table]
-            for column in columns:
-                if column not in query:
-                    logging.error(f"A coluna {column} não existe na tabela {table}")
-                    return False
-    logging.info("A query é válida.")
-    return True
+    def on_agent_action(self, action, **kwargs):
+        if action.tool in ['sql_db_query_checker', 'sql_db_query']:
+            self.sql_result.append(action.tool_input)
 
 
-def get_llm_model():
-    if not c.IS_OCI_CREDENTIALS_VALID:
-        return
-    client = oci.generative_ai_inference.GenerativeAiInferenceClient(
-        config=c.OCI_CREDENTIALS,
-        service_endpoint=c.DEFAULT_GENAI_SERVICE_ENDPOINT,
-    )
-    model = ChatOCIGenAI(
-        model_id='cohere.command-r-plus', #
-        service_endpoint=c.DEFAULT_GENAI_SERVICE_ENDPOINT,
-        compartment_id=c.DEFAULT_COMPARTMENT_ID,
-        model_kwargs={
-            'max_tokens': c.MAX_TOKENS,
-            'temperature': 0.1,
-        },
-        client=client,
-    )
+def get_llm_model(OPENAI=True):
+
+    if OPENAI:
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError(
+                'A chave API não foi encontrada. Verifique a variável de ambiente.'
+            )
+
+        model = ChatOpenAI(
+            api_key=api_key, model='gpt-4o-mini', temperature=0.2
+        )
+    else:
+        if not c.IS_OCI_CREDENTIALS_VALID:
+            return
+        client = oci.generative_ai_inference.GenerativeAiInferenceClient(
+            config=c.OCI_CREDENTIALS,
+            service_endpoint=c.DEFAULT_GENAI_SERVICE_ENDPOINT,
+        )
+        model = ChatOCIGenAI(
+            model_id='meta.llama-3.1-405b-instruct',  #'cohere.command-r-plus', #
+            service_endpoint=c.DEFAULT_GENAI_SERVICE_ENDPOINT,
+            compartment_id=c.DEFAULT_COMPARTMENT_ID,
+            model_kwargs={
+                'max_tokens': c.MAX_TOKENS,
+                'temperature': 0.1,
+            },
+            client=client,
+        )
     return model
 
 
-def sql_agent(llm, db=None, db_schema="public"):
-    chain = create_sql_query_chain(llm, db)
-    table_info_str = get_table_headers(db, db_schema)
+def my_sql_agent(llm, db, db_schema):
+    table_info = get_table_headers(db, db_schema)
+    print(table_info)
+    db_toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 
-    prompt = ChatPromptTemplate.from_messages(
-        [("system", c.system), ("human", "{query}")]
-    ).partial(
-        dialect=db.dialect,
-        schema=db_schema,
-        table_info=table_info_str,
+    prompt_formatted = c.system.format(schema=db_schema, table_info=table_info)
+    system_message = SystemMessage(content=prompt_formatted)
+    logging.info(f'Prompt formatado: {system_message}')
+
+    my_agent = create_sql_agent(
+        llm,
+        toolkit=db_toolkit,
+        agent_type='openai-tools',
+        verbose=True,
+        messages_modifier=system_message,
+        handle_parsing_errors=True,
+        handle_sql_errors=True,
     )
-    validation_chain = prompt | llm | StrOutputParser()
-    full_chain = {"query": chain} | validation_chain
 
-    return full_chain
+    return my_agent
